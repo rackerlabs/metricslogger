@@ -42,19 +42,67 @@ def _list_join(delimiter, *names):
     return delimiter.join(itertools.chain([_to_list(n) for n in names if n is not None]))
 
 
+class NestedConfig(object):
+    def __init__(self, parent=None):
+        # self._names = set()
+        self._config = dict()
+        self._parent = parent
+
+    def set_config(self, name, value):
+        self._config[name] = value
+
+    def get_config(self, name):
+        if name in self._config:
+            return self._config[name]
+        elif self._parent:
+            return self._parent.get_config(name)
+        else:
+            return None
+
+    def add_config(self, name, default=None, override=False):
+        # self._names.add(name)
+
+        def setter_fn(value):
+            return self.set_config(name, value)
+
+        def getter_fn():
+            return self.get_config(name)
+
+        if not override:
+            self.set_config(name, default)
+
+        return setter_fn, getter_fn
+
+
+# Global config options
+_global_config = NestedConfig()
+
+# Public global config setters and getters
+setGlobalPrefix, getGlobalPrefix = _global_config.add_config('global_prefix', '')
+setPrependHost, getPrependHost = _global_config.add_config('prepend_host', False)
+setPrependHostReverse, getPrependHostReverse = _global_config.add_config('prepend_host', False)
+setHost, getHost = _global_config.add_config('host', socket.gethostname().split('.'))
+
+setStatsdDelimiter, getStatsdDelimiter = _global_config.add_config('statsd_delimiter', '.')
+setStatsdHost, getStatsdHost = _global_config.add_config('statsd_host', '.')
+setStatsdPort, getStatsdPort = _global_config.add_config('statsd_port', '.')
+
+
 @six.add_metaclass(abc.ABCMeta)
 class MetricsLogger(object):
     """Abstract class representing a metrics logger."""
 
-    loggers = dict()
-    logger_class = None
-    global_prefix = ''
-    prepend_host = False
-    prepend_host_reverse = False
-    host = socket.gethostname().split('.')
+    def __init__(self):
+        self._config_override = NestedConfig(_global_config)
 
-    def __init__(self, prefix):
-        self.prefix = prefix
+        # Add getters for non-overridable options
+        _, self.getLoggerClass = _global_config.add_config('logger_class', override=True)
+        _, self.getGlobalPrefix = _global_config.add_config('global_prefix', override=True)
+
+        # Add setters and getters for instance-overridable options
+        self.setPrependHost, self.getPrependHost = self._config_override.add_config('prepend_host', override=True)
+        self.setPrependHostReverse, self.getPrependHostReverse = self._config_override.add_config('prepend_host', override=True)
+        self.setHost, self.getHost = self._config_override.add_config('host', override=True)
 
     def format_name(self, name):
         host = ''
@@ -149,7 +197,10 @@ class MetricsLogger(object):
 class NoopMetricsLogger(MetricsLogger):
     """MetricsLogger that ignores all metric data."""
     def __init__(self, prefix, delimiter):
-        super(NoopMetricsLogger, self).__init__(prefix, delimiter)
+        super(NoopMetricsLogger, self).__init__()
+
+    def _format_name(self, m_name, m_value):
+        pass
 
     def _gauge(self, m_name, m_value):
         pass
@@ -175,18 +226,15 @@ class StatsdMetricsLogger(MetricsLogger):
     TIMER_TYPE = 'ms'
     METER_TYPE = 'm'
 
-    prefix = []
-    delimiter = '.'
-    statsd_host = 'localhost'
-    statsd_port = 8125
-
-    def __init__(self, prefix=None, delimiter=None, statsd_host=None, statsd_port=None):
+    def __init__(self):
         """Initialize a StatsdMetricsLogger"""
 
-        self._prefix_override = prefix
-        self._delimiter_override = delimiter
-        self._statsd_host_override = statsd_host
-        self._statsd_port_override = statsd_port
+        super(StatsdMetricsLogger, self).__init__()
+
+        # Add setters and getters for instance-overridable options
+        self.setStatsdDelimiter, self.getStatsdDelimiter = self._config_override.add_config('statsd_delimiter', override=True)
+        self.setStatsdHost, self.getStatsdHost = self._config_override.add_config('statsd_host', override=True)
+        self.setStatsdPort, self.getStatsdPort = self._config_override.add_config('statsd_port', override=True)
 
     def _send(self, m_name, m_value, m_type, sample_rate=None):
         if sample_rate is None:
@@ -199,8 +247,12 @@ class StatsdMetricsLogger(MetricsLogger):
         with contextlib.closing(self._open_socket()) as sock:
             return sock.sendto(metric, self.getStatsdTarget())
 
-    def _open_socket(self):
+    @staticmethod
+    def _open_socket():
         return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def _format_name(self, global_prefix, host, prefix, name):
+        return _list_join(self.getDelimiter(), global_prefix, host, name)
 
     def _gauge(self, m_name, m_value):
         return self._send(m_name, m_value, self.GAUGE_TYPE)
@@ -215,47 +267,7 @@ class StatsdMetricsLogger(MetricsLogger):
     def _meter(self, m_name, m_value):
         return self._send(m_name, m_value, self.METER_TYPE)
 
-    def _format_name(self, global_prefix, host, prefix, name):
-        return _list_join(self.getDelimiter(), global_prefix, host, name)
 
-    def getDelimiter(self):
-        if self._delimiter_override is not None:
-            return self._delimiter_override
-        else:
-            return self._delimiter
-
-    def getPrefix(self):
-        if self._prefix_override is not None:
-            return self._prefix_override
-        else:
-            return self._prefix
-
-    def getStatsdHost(self):
-        if self._statsd_host_override is not None:
-            return self._statsd_host_override
-        else:
-            return self._statsd_host
-
-    def getStatsdPort(self):
-        if self._statsd_port_override is not None:
-            return self._statsd_port_override
-        else:
-            return self._statsd_port
-
-    def getStatsdTarget(self):
-        return self.getStatsdHost(), self.getStatsdPort()
-
-    def setDelimiter(self, delimiter):
-        self._delimiter_override = delimiter
-
-    def setPrefix(self, prefix):
-        self._prefix_override = prefix
-
-    def setStatsdHost(self, host):
-        self._statsd_host_override = host
-
-    def setStatsdPort(self, port):
-        self._statsd_port_override = port
 
 
 class InstrumentContext(object):
@@ -274,45 +286,6 @@ class InstrumentContext(object):
         self.logger.timer(self.parts, duration)
 
 
-def setLoggerClass(klass):
-    MetricsLogger.logger_class = klass
-
-
-def getLoggerClass():
-    return MetricsLogger.logger_class
-
-
-def setGlobalPrefix(prefix):
-    MetricsLogger.global_prefix = _to_list(prefix)
-
-
-def getGlobalPrefix():
-    return MetricsLogger.global_prefix
-
-
-def setPrependHost(value):
-    MetricsLogger.prepend_host = value
-
-
-def getPrependHost():
-    return MetricsLogger.prepend_host
-
-
-def setPrependHostReverse(value):
-    MetricsLogger.prepend_host_reverse = value
-
-
-def getPrependHostReverse():
-    return MetricsLogger.prepend_host_reverse
-
-
-def setHost(host):
-    MetricsLogger.host = host
-
-
-def getHost():
-    return MetricsLogger.host
-
 
 def initLogger(name):
     LoggerCls = getLoggerClass()
@@ -328,4 +301,6 @@ def getLogger(name):
 
     return MetricsLogger.loggers[name]
 
-MetricsLogger.logger_class = StatsdMetricsLogger
+
+setLoggerClass, getLoggerClass = _global_config.add_config('logger_class', StatsdMetricsLogger)
+
