@@ -55,7 +55,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'Python Metrics Logger'
+project = u'Python Metrics Logging'
 copyright = u'2014, Alex Weeks'
 
 # The version info for the project you're documenting, acts as replacement
@@ -209,7 +209,7 @@ latex_elements = {
 # [howto/manual]).
 latex_documents = [
     ('index', 'metricslogging.tex',
-     u'Python Metrics Logger Documentation',
+     u'Python Metrics Logging Documentation',
      u'Alex Weeks', 'manual'),
 ]
 
@@ -240,7 +240,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'metricslogging',
-     u'Python Metrics Logger Documentation',
+     u'Python Metrics Logging Documentation',
      [u'Alex Weeks'], 1)
 ]
 
@@ -255,7 +255,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     ('index', 'metricslogging',
-     u'Python Metrics Logger Documentation',
+     u'Python Metrics Logging Documentation',
      u'Alex Weeks',
      'metricslogging',
      'One line description of project.',

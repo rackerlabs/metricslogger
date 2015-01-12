@@ -22,7 +22,7 @@ test_requirements = [
 setup(
     name='metricslogging',
     version='0.1.0',
-    description='Python Metrics Logger',
+    description='Python Metrics Logging',
     long_description=readme + '\n\n' + history,
     author='Alex Weeks',
     author_email='alex.weeks@rackspace.com',

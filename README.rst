@@ -1,5 +1,5 @@
 ===============================
-Python Metrics Logger
+Python Metrics Logging
 ===============================
 
 .. image:: https://badge.fury.io/py/metricslogging.png
@@ -12,7 +12,7 @@ Python Metrics Logger
         :target: https://pypi.python.org/pypi/metricslogging
 
 
-Python Metrics Logger
+Python Metrics Logging
 
 * Free software: BSD license
 * Documentation: https://metricslogging.readthedocs.org.
