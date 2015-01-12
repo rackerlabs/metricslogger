@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-#  Copyright 2014 Rackspace Hosting
+# Copyright 2015 Rackspace Hosting
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -22,6 +22,7 @@ import itertools
 import random
 import six
 import socket
+import string
 import time
 
 
@@ -29,22 +30,35 @@ def _time():
     return time.time()
 
 
-def _to_list(name):
-    if isinstance(name, basestring):
-        return [name]
-    elif isinstance(name, tuple):
-        return list(name)
+def _to_list(parts):
+    if parts is None:
+        return []
+    elif isinstance(parts, list):
+        return parts
+    elif isinstance(parts, basestring):
+        return [parts]
+    elif isinstance(parts, tuple):
+        return list(parts)
     else:
-        return name
+        raise TypeError("Can only operate on lists, strings, or tuples")
 
 
-def _list_join(delimiter, *names):
-    return delimiter.join(itertools.chain([_to_list(n) for n in names if n is not None]))
+def _list_chain(skip_empty, *parts):
+    return filter(lambda s: not skip_empty or s != "", itertools.chain(*[_to_list(p) for p in parts]))
 
+
+def _list_join(delimiter, skip_empty, *parts):
+    return delimiter.join(_list_chain(skip_empty, *parts))
+
+
+def _get_host_parts(host):
+    if isinstance(host, basestring):
+        return _to_list(host.split('.'))
+    else:
+        return _to_list(host)
 
 class NestedConfig(object):
     def __init__(self, parent=None):
-        # self._names = set()
         self._config = dict()
         self._parent = parent
 
@@ -59,9 +73,10 @@ class NestedConfig(object):
         else:
             return None
 
-    def add_config(self, name, default=None, override=False):
-        # self._names.add(name)
+    def reset_config(self):
+        self._config = dict()
 
+    def add_config(self, name, default=None, override=False):
         def setter_fn(value):
             return self.set_config(name, value)
 
@@ -80,12 +95,12 @@ _global_config = NestedConfig()
 # Public global config setters and getters
 setGlobalPrefix, getGlobalPrefix = _global_config.add_config('global_prefix', '')
 setPrependHost, getPrependHost = _global_config.add_config('prepend_host', False)
-setPrependHostReverse, getPrependHostReverse = _global_config.add_config('prepend_host', False)
-setHost, getHost = _global_config.add_config('host', socket.gethostname().split('.'))
+setPrependHostReverse, getPrependHostReverse = _global_config.add_config('prepend_host_reverse', False)
+setHost, getHost = _global_config.add_config('host', socket.gethostname())
 
 setStatsdDelimiter, getStatsdDelimiter = _global_config.add_config('statsd_delimiter', '.')
-setStatsdHost, getStatsdHost = _global_config.add_config('statsd_host', '.')
-setStatsdPort, getStatsdPort = _global_config.add_config('statsd_port', '.')
+setStatsdHost, getStatsdHost = _global_config.add_config('statsd_host', 'localhost')
+setStatsdPort, getStatsdPort = _global_config.add_config('statsd_port', 8125)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -100,19 +115,21 @@ class MetricsLogger(object):
         _, self.getGlobalPrefix = _global_config.add_config('global_prefix', override=True)
 
         # Add setters and getters for instance-overridable options
+        self.setPrefix, self.getPrefix = self._config_override.add_config('prefix', override=True)
         self.setPrependHost, self.getPrependHost = self._config_override.add_config('prepend_host', override=True)
-        self.setPrependHostReverse, self.getPrependHostReverse = self._config_override.add_config('prepend_host', override=True)
+        self.setPrependHostReverse, self.getPrependHostReverse = self._config_override.add_config('prepend_host_reverse', override=True)
         self.setHost, self.getHost = self._config_override.add_config('host', override=True)
 
     def format_name(self, name):
-        host = ''
-        if getPrependHost():
-            if getPrependHostReverse():
-                host = _to_list(reversed(getHost()))
-            else:
-                host = getHost()
+        if self.getPrependHost():
+            host = _get_host_parts(self.getHost())
+        else:
+            host = []
 
-        return self._format_name(getGlobalPrefix(), host, _to_list(self.prefix), _to_list(name))
+        if self. getPrependHostReverse():
+            host = list(reversed(host))
+
+        return self._format_name(self.getGlobalPrefix(), host, self.getPrefix(), name)
 
     def gauge(self, name, value):
         """Send gauge metric data."""
@@ -142,10 +159,6 @@ class MetricsLogger(object):
         """Send timer data."""
         self._timer(self.format_name(name), value)
 
-    def meter(self, name, value):
-        """Send meter data."""
-        self._meter(self.format_name(name), value)
-
     @abc.abstractmethod
     def _format_name(self, global_prefix, host, prefix, name):
         """Abstract method for backends to implement metric behavior."""
@@ -162,11 +175,7 @@ class MetricsLogger(object):
     def _timer(self, name, value):
         """Abstract method for backends to implement timer behavior."""
 
-    @abc.abstractmethod
-    def _meter(self, name, value):
-        """Abstract method for backends to implement meter behavior."""
-
-    def instrument(self, *name):
+    def fn_time(self, *name):
         """Returns a decorator that instruments a function, bound to this
         MetricsLogger.  For example:
 
@@ -196,25 +205,22 @@ class MetricsLogger(object):
 
 class NoopMetricsLogger(MetricsLogger):
     """MetricsLogger that ignores all metric data."""
-    def __init__(self, prefix, delimiter):
+    def __init__(self):
         super(NoopMetricsLogger, self).__init__()
 
     def _format_name(self, m_name, m_value):
         pass
 
-    def _gauge(self, m_name, m_value):
+    def _gauge(self, name, value):
         pass
 
-    def _counter(self, m_name, m_value, sample_rate=None):
+    def _counter(self,name, value, sample_rate=None):
         pass
 
-    def _timer(self, m_name, m_value):
+    def _timer(self, name, value):
         pass
 
-    def _meter(self, m_name, m_value):
-        pass
-
-    def _format_name(self, global_prefix, name):
+    def _format_name(self, global_prefix, host, prefix, name):
         pass
 
 
@@ -224,7 +230,9 @@ class StatsdMetricsLogger(MetricsLogger):
     GAUGE_TYPE = 'g'
     COUNTER_TYPE = 'c'
     TIMER_TYPE = 'ms'
-    METER_TYPE = 'm'
+
+    PROHIBITED_CHARS = ':|@'
+    REPLACE_CHARS = '---'
 
     def __init__(self):
         """Initialize a StatsdMetricsLogger"""
@@ -236,23 +244,28 @@ class StatsdMetricsLogger(MetricsLogger):
         self.setStatsdHost, self.getStatsdHost = self._config_override.add_config('statsd_host', override=True)
         self.setStatsdPort, self.getStatsdPort = self._config_override.add_config('statsd_port', override=True)
 
-    def _send(self, m_name, m_value, m_type, sample_rate=None):
+    def _send(self, name, value, type, sample_rate=None):
         if sample_rate is None:
-            metric = '%s:%s|%s' % (m_name, m_value, m_type)
+            metric = '%s:%s|%s' % (self._sanitize(name), self._sanitize(value), self._sanitize(type))
         else:
-            metric = '%s:%s|%s@%s' % (m_name, m_value, m_type, sample_rate)
+            metric = '%s:%s|%s@%s' % (self._sanitize(name), self._sanitize(value),
+                                      self._sanitize(type), self._sanitize(sample_rate))
 
-        # Ideally, we'd cache a sending socket in self, but that
-        # results in a socket getting shared by multiple green threads.
+        print metric
+
         with contextlib.closing(self._open_socket()) as sock:
-            return sock.sendto(metric, self.getStatsdTarget())
+            return sock.sendto(metric, (self.getStatsdHost(), self.getStatsdPort()))
+
+    @staticmethod
+    def _sanitize(s):
+        return str(s).translate(string.maketrans(StatsdMetricsLogger.PROHIBITED_CHARS, StatsdMetricsLogger.REPLACE_CHARS))
 
     @staticmethod
     def _open_socket():
         return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def _format_name(self, global_prefix, host, prefix, name):
-        return _list_join(self.getDelimiter(), global_prefix, host, name)
+        return _list_join(self.getStatsdDelimiter(), True, global_prefix, host, prefix, name)
 
     def _gauge(self, m_name, m_value):
         return self._send(m_name, m_value, self.GAUGE_TYPE)
@@ -263,11 +276,6 @@ class StatsdMetricsLogger(MetricsLogger):
 
     def _timer(self, m_name, m_value):
         return self._send(m_name, m_value, self.TIMER_TYPE)
-
-    def _meter(self, m_name, m_value):
-        return self._send(m_name, m_value, self.METER_TYPE)
-
-
 
 
 class InstrumentContext(object):
@@ -286,20 +294,23 @@ class InstrumentContext(object):
         self.logger.timer(self.parts, duration)
 
 
-
 def initLogger(name):
     LoggerCls = getLoggerClass()
+    logger = LoggerCls()
 
-    return LoggerCls()
+    logger.setPrefix(name)
+    return logger
+
+_loggers = dict()
 
 
 def getLogger(name):
     """Return a MetricsLogger with the specified name."""
 
-    if name not in MetricsLogger.loggers:
-        MetricsLogger.loggers[name] = initLogger(name)
+    if name not in _loggers:
+        _loggers[name] = initLogger(name)
 
-    return MetricsLogger.loggers[name]
+    return _loggers[name]
 
 
 setLoggerClass, getLoggerClass = _global_config.add_config('logger_class', StatsdMetricsLogger)
