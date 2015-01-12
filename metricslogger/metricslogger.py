@@ -251,8 +251,6 @@ class StatsdMetricsLogger(MetricsLogger):
             metric = '%s:%s|%s@%s' % (self._sanitize(name), self._sanitize(value),
                                       self._sanitize(type), self._sanitize(sample_rate))
 
-        print metric
-
         with contextlib.closing(self._open_socket()) as sock:
             return sock.sendto(metric, (self.getStatsdHost(), self.getStatsdPort()))
 
