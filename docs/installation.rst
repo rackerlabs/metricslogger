@@ -4,9 +4,9 @@ Installation
 
 At the command line::
 
-    $ easy_install metricslogger
+    $ easy_install metricslogging
 
 Or, if you have virtualenvwrapper installed::
 
-    $ mkvirtualenv metricslogger
-    $ pip install metricslogger
+    $ mkvirtualenv metricslogging
+    $ pip install metricslogging

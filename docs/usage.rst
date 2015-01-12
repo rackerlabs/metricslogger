@@ -2,6 +2,6 @@
 Usage
 ========
 
-To use Python Metrics Logger in a project::
+To use Python Metrics Logging in a project::
 
-    import metricslogger
+    import metricslogging

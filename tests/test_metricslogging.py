@@ -19,10 +19,10 @@ import mock
 import socket
 import unittest
 
-import metricslogger
+import metricslogging
 
 
-class MockedMetricsLogger(metricslogger.MetricsLogger):
+class MockedMetricsLogger(metricslogging.MetricsLogger):
     _format_name = mock.Mock(return_value="mocked_format_name")
     _gauge = mock.Mock()
     _counter = mock.Mock()
@@ -33,8 +33,8 @@ class TestNestedConfig(unittest.TestCase):
     def setUp(self):
         super(TestNestedConfig, self).setUp()
 
-        self.parent_config = metricslogger.NestedConfig()
-        self.child_config = metricslogger.NestedConfig(parent=self.parent_config)
+        self.parent_config = metricslogging.NestedConfig()
+        self.child_config = metricslogging.NestedConfig(parent=self.parent_config)
 
         self.parentSetConfig, self.parentGetConfig = self.parent_config.add_config("config")
         self.parentSetConfigDefault, self.parentGetConfigDefault = self.parent_config.add_config("configdefault", default="default")
@@ -48,11 +48,11 @@ class TestNestedConfig(unittest.TestCase):
 class TestMetricsLogger(unittest.TestCase):
     def setUp(self):
         super(TestMetricsLogger, self).setUp()
-        metricslogger.setGlobalPrefix("globalprefix")
-        metricslogger.setStatsdDelimiter(".")
-        metricslogger.setHost("host.example.com")
-        metricslogger.setPrependHost(True)
-        metricslogger.setPrependHostReverse(True)
+        metricslogging.setGlobalPrefix("globalprefix")
+        metricslogging.setStatsdDelimiter(".")
+        metricslogging.setHost("host.example.com")
+        metricslogging.setPrependHost(True)
+        metricslogging.setPrependHostReverse(True)
 
         self.ml = MockedMetricsLogger()
         self.ml.setPrefix("testprefix")
@@ -114,8 +114,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.timer("metric", 10)
         self.ml._timer.assert_called_once_with("mocked_format_name", 10)
 
-    @mock.patch("metricslogger.metricslogger._time")
-    @mock.patch("metricslogger.metricslogger.MetricsLogger.timer")
+    @mock.patch("metricslogging.metricslogging._time")
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
     def test_instrument(self, mock_timer, mock_time):
         mock_time.side_effect=[1, 43]
 
@@ -130,7 +130,7 @@ class TestMetricsLogger(unittest.TestCase):
 class TestStatsdMetricsLogger(unittest.TestCase):
     def setUp(self):
         super(TestStatsdMetricsLogger, self).setUp()
-        self.ml = metricslogger.StatsdMetricsLogger()
+        self.ml = metricslogging.StatsdMetricsLogger()
         self.ml.setStatsdDelimiter(".")
         self.ml.setStatsdHost("testhost")
         self.ml.setStatsdPort(4321)
@@ -183,12 +183,12 @@ class TestStatsdMetricsLogger(unittest.TestCase):
             self.ml._format_name("globalprefix", "testhost", "testprefix", ""),
             "globalprefix.testhost.testprefix")
 
-    @mock.patch("metricslogger.metricslogger.StatsdMetricsLogger._send")
+    @mock.patch("metricslogging.metricslogging.StatsdMetricsLogger._send")
     def test_gauge(self, mock_send):
         self.ml._gauge("metric", 10)
         mock_send.assert_called_once_with("metric", 10, "g")
 
-    @mock.patch("metricslogger.metricslogger.StatsdMetricsLogger._send")
+    @mock.patch("metricslogging.metricslogging.StatsdMetricsLogger._send")
     def test__counter(self, mock_send):
         self.ml._counter("metric", 10)
         mock_send.assert_called_once_with("metric", 10, "c", sample_rate=None)
@@ -197,7 +197,7 @@ class TestStatsdMetricsLogger(unittest.TestCase):
         self.ml._counter("metric", 10, sample_rate=1.0)
         mock_send.assert_called_once_with("metric", 10, "c", sample_rate=1.0)
 
-    @mock.patch("metricslogger.metricslogger.StatsdMetricsLogger._send")
+    @mock.patch("metricslogging.metricslogging.StatsdMetricsLogger._send")
     def test__timer(self, mock_send):
         self.ml._timer("metric", 10)
         mock_send.assert_called_once_with("metric", 10, "ms")
@@ -259,15 +259,15 @@ class TestGetLogger(unittest.TestCase):
         super(TestGetLogger, self).setUp()
 
     def test_get_noop_logger(self):
-        metricslogger.setLoggerClass(metricslogger.NoopMetricsLogger)
-        logger = metricslogger.getLogger("foo")
-        self.assertTrue(isinstance(logger, metricslogger.NoopMetricsLogger))
+        metricslogging.setLoggerClass(metricslogging.NoopMetricsLogger)
+        logger = metricslogging.getLogger("foo")
+        self.assertTrue(isinstance(logger, metricslogging.NoopMetricsLogger))
 
     def test_get_statsd_logger(self):
-        metricslogger.setLoggerClass(metricslogger.StatsdMetricsLogger)
+        metricslogging.setLoggerClass(metricslogging.StatsdMetricsLogger)
 
-        logger = metricslogger.getLogger("bar")
-        self.assertTrue(isinstance(logger, metricslogger.StatsdMetricsLogger))
+        logger = metricslogging.getLogger("bar")
+        self.assertTrue(isinstance(logger, metricslogging.StatsdMetricsLogger))
         self.assertEqual(logger.getPrefix(), "bar")
 
 

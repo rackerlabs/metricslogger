@@ -20,23 +20,23 @@ test_requirements = [
 ]
 
 setup(
-    name='metricslogger',
+    name='metricslogging',
     version='0.1.0',
     description='Python Metrics Logger',
     long_description=readme + '\n\n' + history,
     author='Alex Weeks',
     author_email='alex.weeks@rackspace.com',
-    url='https://github.com/rackerlabs/metricslogger',
+    url='https://github.com/rackerlabs/metricslogging',
     packages=[
-        'metricslogger',
+        'metricslogging',
     ],
-    package_dir={'metricslogger':
-                 'metricslogger'},
+    package_dir={'metricslogging':
+                 'metricslogging'},
     include_package_data=True,
     install_requires=requirements,
     license="BSD",
     zip_safe=False,
-    keywords='metricslogger',
+    keywords='metricslogging',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',

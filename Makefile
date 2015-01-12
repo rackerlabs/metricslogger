@@ -32,7 +32,7 @@ clean-test:
 	rm -fr htmlcov/
 
 lint:
-	flake8 metricslogger tests
+	flake8 metricslogging tests
 
 test:
 	python setup.py test
@@ -41,15 +41,15 @@ test-all:
 	tox
 
 coverage:
-	coverage run --source metricslogger setup.py test
+	coverage run --source metricslogging setup.py test
 	coverage report -m
 	coverage html
 	open htmlcov/index.html
 
 docs:
-	rm -f docs/metricslogger.rst
+	rm -f docs/metricslogging.rst
 	rm -f docs/modules.rst
-	sphinx-apidoc -o docs/ metricslogger
+	sphinx-apidoc -o docs/ metricslogging
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html
 	open docs/_build/html/index.html
