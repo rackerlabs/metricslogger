@@ -14,7 +14,7 @@ Python Metrics Logging
 
 Python Metrics Logging
 
-* Free software: BSD license
+* Free software: Apache license
 * Documentation: https://metricslogging.readthedocs.org.
 
 Features
