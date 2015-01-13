@@ -1,5 +1,4 @@
-contextlib2
-mock
-six
-pprint
+contextlib2==0.4.0
+mock==1.0.1
+six==1.9.0
 wheel==0.23.0
