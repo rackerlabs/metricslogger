@@ -1,3 +1,5 @@
-wheel==0.23.0
-six
+contextlib2
 mock
+six
+pprint
+wheel==0.23.0

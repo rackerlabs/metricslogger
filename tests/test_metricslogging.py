@@ -116,10 +116,10 @@ class TestMetricsLogger(unittest.TestCase):
 
     @mock.patch("metricslogging.metricslogging._time")
     @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
-    def test_instrument(self, mock_timer, mock_time):
+    def test_time_fn(self, mock_timer, mock_time):
         mock_time.side_effect=[1, 43]
 
-        @self.ml.fn_time("foo", "bar", "baz")
+        @self.ml.time_fn("foo", "bar", "baz")
         def func(x):
             return x * x
 
@@ -138,8 +138,7 @@ class TestStatsdMetricsLogger(unittest.TestCase):
     def test__format_name(self):
         self.assertEqual(
             self.ml._format_name("globalprefix", "testhost", "testprefix", "testmetric"),
-            "globalprefix.testhost.testprefix.testmetric"
-        )
+            "globalprefix.testhost.testprefix.testmetric")
 
     def test__format_name_with_lists(self):
         self.assertEqual(
@@ -251,7 +250,6 @@ class TestStatsdMetricsLogger(unittest.TestCase):
         mock_socket.sendto.assert_called_once_with(
             "m-e-t-ric:2|type",
             ("testhost", 4321))
-
 
 
 class TestGetLogger(unittest.TestCase):

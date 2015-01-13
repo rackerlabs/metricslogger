@@ -17,8 +17,10 @@
 
 import abc
 import contextlib
+import contextlib2
 import functools
 import itertools
+import pprint
 import random
 import six
 import socket
@@ -103,6 +105,34 @@ setStatsdHost, getStatsdHost = _global_config.add_config('statsd_host', 'localho
 setStatsdPort, getStatsdPort = _global_config.add_config('statsd_port', 8125)
 
 
+class TimerContextDecorator(contextlib2.ContextDecorator):
+    def __init__(self, logger, name):
+        self.logger = logger
+        self.name = name
+
+    def __enter__(self):
+        self.start_time = time.time()
+        return self
+
+    def __exit__(self, *exc):
+        duration = (time.time() - self.start_time) * 1000
+        self.logger.timer(self.name, duration)
+
+
+class CounterContextDecorator(contextlib2.ContextDecorator):
+    def __init__(self, logger, name, sample_rate):
+        self.logger = logger
+        self.name = name
+        self.sample_rate = sample_rate
+
+    def __enter__(self):
+        self.logger.counter(self.name, 1, sample_rate=self.sample_rate)
+        return self
+
+    def __exit__(self, *exc):
+        pass
+
+
 @six.add_metaclass(abc.ABCMeta)
 class MetricsLogger(object):
     """Abstract class representing a metrics logger."""
@@ -175,15 +205,11 @@ class MetricsLogger(object):
     def _timer(self, name, value):
         """Abstract method for backends to implement timer behavior."""
 
-    def fn_time(self, *name):
+    def time_fn(self, *name):
         """Returns a decorator that instruments a function, bound to this
         MetricsLogger.  For example:
 
-        from ironic.common import metrics
-
-        METRICS = metrics.getLogger()
-
-        @METRICS.instrument('foo')
+        @METRICS.time_fn('foo')
         def foo(bar, baz):
             print bar, baz
         """
@@ -202,26 +228,50 @@ class MetricsLogger(object):
             return wrapped
         return decorator
 
+    def timer_cd(self, name):
+        return TimerContextDecorator(self, name)
+
+    def counter_cd(self, name, sample_rate=None):
+        return CounterContextDecorator(self, name, sample_rate)
+
 
 class NoopMetricsLogger(MetricsLogger):
     """MetricsLogger that ignores all metric data."""
     def __init__(self):
         super(NoopMetricsLogger, self).__init__()
 
-    def _format_name(self, m_name, m_value):
+    def _format_name(self, *args, **kwargs):
         pass
 
-    def _gauge(self, name, value):
+    def _gauge(self, *args, **kwargs):
         pass
 
-    def _counter(self,name, value, sample_rate=None):
+    def _counter(self, *args, **kwargs):
         pass
 
-    def _timer(self, name, value):
+    def _timer(self, *args, **kwargs):
         pass
 
-    def _format_name(self, global_prefix, host, prefix, name):
+    def _format_name(self, *args, **kwargs):
         pass
+
+
+class DebugMetricsLogger(MetricsLogger):
+    """MetricsLogger that prints all calls for debugging purposes"""
+    def __init__(self):
+        super(DebugMetricsLogger, self).__init__()
+
+    def _format_name(self, *args, **kwargs):
+        pprint.pprint(("_format_name call:", args, kwargs))
+
+    def _gauge(self, *args, **kwargs):
+        pprint.pprint(("_gauge call:", args, kwargs))
+
+    def _counter(self, *args, **kwargs):
+        pprint.pprint(("_counter call:", args, kwargs))
+
+    def _timer(self, *args, **kwargs):
+        pprint.pprint(("_timer call:", args, kwargs))
 
 
 class StatsdMetricsLogger(MetricsLogger):
@@ -231,8 +281,8 @@ class StatsdMetricsLogger(MetricsLogger):
     COUNTER_TYPE = 'c'
     TIMER_TYPE = 'ms'
 
-    PROHIBITED_CHARS = ':|@'
-    REPLACE_CHARS = '---'
+    PROHIBITED_CHARS = ':|@\n'
+    REPLACE_CHARS = '----'
 
     def __init__(self):
         """Initialize a StatsdMetricsLogger"""
@@ -275,21 +325,6 @@ class StatsdMetricsLogger(MetricsLogger):
     def _timer(self, m_name, m_value):
         return self._send(m_name, m_value, self.TIMER_TYPE)
 
-
-class InstrumentContext(object):
-    """Metrics instrumentation context manager"""
-    def __init__(self, prefix, *parts):
-        self.logger = getLogger(prefix)
-        self.parts = parts
-
-    def __enter__(self):
-        self.start_time = time.time()
-        return self.logger
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        duration = (time.time() - self.start_time) * 1000
-        # Log the timing data
-        self.logger.timer(self.parts, duration)
 
 
 def initLogger(name):
