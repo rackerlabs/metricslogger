@@ -18,7 +18,6 @@
 import abc
 import contextlib
 import contextlib2
-import functools
 import itertools
 import pprint
 import random
@@ -58,6 +57,7 @@ def _get_host_parts(host):
         return _to_list(host.split('.'))
     else:
         return _to_list(host)
+
 
 class NestedConfig(object):
     def __init__(self, parent=None):
@@ -106,6 +106,11 @@ setStatsdPort, getStatsdPort = _global_config.add_config('statsd_port', 8125)
 
 
 class TimerContextDecorator(contextlib2.ContextDecorator):
+    """
+    Combination decorator and context manager to time functions or code blocks.
+    Emits a timer metric to the specified logger.  Recommended to be
+    instantiated by the timer_cd() convenience function on a MetricLogger.
+    """
     def __init__(self, logger, name):
         self.logger = logger
         self.name = name
@@ -120,6 +125,12 @@ class TimerContextDecorator(contextlib2.ContextDecorator):
 
 
 class CounterContextDecorator(contextlib2.ContextDecorator):
+    """
+    Combination decorator and context manager to count function calls or code
+    block executions.  Emits a timer metric to the specified logger.
+    Recommended to be instantiated by the counter_cd() convenience function on
+    a MetricLogger.
+    """
     def __init__(self, logger, name, sample_rate):
         self.logger = logger
         self.name = name
@@ -151,6 +162,11 @@ class MetricsLogger(object):
         self.setHost, self.getHost = self._config_override.add_config('host', override=True)
 
     def format_name(self, name):
+        """Format a given metric name in the context of the settings for this
+        MetricsLogger.
+
+        :param name: Metric name
+        """
         if self.getPrependHost():
             host = _get_host_parts(self.getHost())
         else:
@@ -172,7 +188,7 @@ class MetricsLogger(object):
     def counter(self, name, value, sample_rate=None):
         """Send counter metric data.
 
-        Optionally, specify sample_rate in the interval [0.0, 1.0] to
+        Optionally, specify sample_rate in the interval [0.0, 1.0], or None to
         sample data probabilistically where:
 
             P(send metric data) = sample_rate
@@ -182,7 +198,7 @@ class MetricsLogger(object):
 
         :param name: Metric name
         :param value: Metric value
-        :param sample_rate: Sample rate in interval [0.0, 1.0]
+        :param sample_rate: Sample rate in interval [0.0, 1.0], or None
         """
         if sample_rate is not None and \
             (sample_rate < 0.0 or sample_rate > 1.0):
@@ -203,24 +219,79 @@ class MetricsLogger(object):
 
     @abc.abstractmethod
     def _format_name(self, global_prefix, host, prefix, name):
-        """Abstract method for backends to implement metric behavior."""
+        """Abstract method for backends to implement metric name formatting.
+
+        :param global_prefix: Global prefix (None if not set)
+        :param host: Logger host
+        :param prefix: Logger prefix
+        :param name: Metric name
+        """
 
     @abc.abstractmethod
     def _gauge(self, name, value):
-        """Abstract method for backends to implement gauge behavior."""
+        """Abstract method for backends to implement gauge behavior.
+
+        :param name: Metric name
+        :param value: Metric value
+        """
 
     @abc.abstractmethod
     def _counter(self, name, value, sample_rate=None):
-        """Abstract method for backends to implement counter behavior."""
+        """Abstract method for backends to implement counter behavior.
+
+        This function is called with P(call) = sample_rate, as described in
+        counter().
+
+        :param name: Metric name
+        :param value: Metric value
+        :param sample_rate: Sample rate in interval [0.0, 1.0], or None
+        """
 
     @abc.abstractmethod
     def _timer(self, name, value):
-        """Abstract method for backends to implement timer behavior."""
+        """Abstract method for backends to implement timer behavior.
+
+        :param name: Metric name
+        :param value: Metric value
+        """
 
     def timer_cd(self, name):
+        """
+        Returns a TimerContextDecorator bound to this MetricsLogger for use
+        timing function calls, or code blocks.  Can be used either as a
+        decorator, or a context manager.  For example:
+
+        METRICS = getLogger("name")
+
+        @METRICS.timer_cd("foo")
+        def foo():
+            do_something()
+
+        with METRICS.timer_cd("bar) as _:
+            do_something()
+
+        :param name: Metric name
+        """
         return TimerContextDecorator(self, name)
 
     def counter_cd(self, name, sample_rate=None):
+        """
+        Returns a CounterContextDecorator bound to this MetricsLogger for use
+        counting function calls, or code block executions.  Can be used either
+        as a decorator, or a context manager.  For example:
+
+        METRICS = getLogger("name")
+
+        @METRICS.counter_cd("foo")
+        def foo():
+            do_something()
+
+        with METRICS.counter_cd("bar) as _:
+            do_something()
+
+        :param name: Metric name
+        :param sample_rate: Sample rate to be passed to counter()
+        """
         return CounterContextDecorator(self, name, sample_rate)
 
 
@@ -274,8 +345,6 @@ class StatsdMetricsLogger(MetricsLogger):
     REPLACE_CHARS = '----'
 
     def __init__(self):
-        """Initialize a StatsdMetricsLogger"""
-
         super(StatsdMetricsLogger, self).__init__()
 
         # Add setters and getters for instance-overridable options
@@ -315,24 +384,35 @@ class StatsdMetricsLogger(MetricsLogger):
         return self._send(m_name, m_value, self.TIMER_TYPE)
 
 
+def initLogger(prefix):
+    """
+    Instantiate a MetricsLogger of the type specified by setLoggerClass, with
+    the given prefix.
 
-def initLogger(name):
+    :param prefix: Prefix to set on MetricsLogger
+    """
     LoggerCls = getLoggerClass()
     logger = LoggerCls()
 
-    logger.setPrefix(name)
+    logger.setPrefix(prefix)
     return logger
 
 _loggers = dict()
 
 
-def getLogger(name):
-    """Return a MetricsLogger with the specified name."""
+def getLogger(prefix):
+    """
+    Get a MetricsLogger with the given prefix.  If a logger with that prefix
+    has already been created, return it.  Otherwise, return a new one via
+    initLogger()
 
-    if name not in _loggers:
-        _loggers[name] = initLogger(name)
+    :param prefix: Prefix to set on MetricsLogger
+    """
 
-    return _loggers[name]
+    if prefix not in _loggers:
+        _loggers[prefix] = initLogger(prefix)
+
+    return _loggers[prefix]
 
 
 setLoggerClass, getLoggerClass = _global_config.add_config('logger_class', StatsdMetricsLogger)

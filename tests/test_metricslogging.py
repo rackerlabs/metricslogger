@@ -15,11 +15,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
+import metricslogging
 import mock
 import socket
 import unittest
-
-import metricslogging
 
 
 class TestNestedConfig(unittest.TestCase):
@@ -73,6 +73,7 @@ class TestTimerContextDecorator(unittest.TestCase):
             pass
 
         mock_timer.assert_called_once_with("metric", 42*1000)
+
 
 class TestCounterContextDecorator(unittest.TestCase):
     def setUp(self):
@@ -302,9 +303,9 @@ class TestStatsdMetricsLogger(unittest.TestCase):
         mock_socket = mock.Mock()
         mock_socket_constructor.return_value = mock_socket
 
-        self.ml._send("m|e@t:ric", 2, "type")
+        self.ml._send("m|e@t:r\nic", 2, "type")
         mock_socket.sendto.assert_called_once_with(
-            "m-e-t-ric:2|type",
+            "m-e-t-r-ic:2|type",
             ("testhost", 4321))
 
 
