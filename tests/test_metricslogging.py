@@ -27,12 +27,16 @@ class TestNestedConfig(unittest.TestCase):
         super(TestNestedConfig, self).setUp()
 
         self.parent_config = metricslogging.NestedConfig()
-        self.child_config = metricslogging.NestedConfig(parent=self.parent_config)
+        self.child_config = metricslogging.NestedConfig(
+            parent=self.parent_config)
 
-        self.parentSetConfig, self.parentGetConfig = self.parent_config.add_config("config")
-        self.parentSetConfigDefault, self.parentGetConfigDefault = self.parent_config.add_config("configdefault", default="default")
+        self.parentSetConfig, self.parentGetConfig = \
+            self.parent_config.add_config("config")
+        self.parentSetConfigDefault, self.parentGetConfigDefault = \
+            self.parent_config.add_config("configdefault", default="default")
 
-        self.childSetConfig, self.childGetConfig = self.child_config.add_config("config", override=True)
+        self.childSetConfig, self.childGetConfig = \
+            self.child_config.add_config("config", override=True)
 
     def test_add_config(self):
         pass
@@ -62,7 +66,6 @@ class TestTimerContextDecorator(unittest.TestCase):
 
         func(10)
         mock_timer.assert_called_once_with("metric", 42*1000)
-
 
     @mock.patch("metricslogging.metricslogging._time")
     @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
@@ -133,7 +136,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHostReverse(False)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", ["host", "example", "com"], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", ["host", "example", "com"], "testprefix", "metric")
 
     def test_format_name_prepend_host_reverse(self):
         self.ml._format_name.reset_mock()
@@ -142,7 +146,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHostReverse(True)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", ["com", "example", "host"], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", ["com", "example", "host"], "testprefix", "metric")
 
     def test_format_name_no_prepend_host(self):
         self.ml._format_name.reset_mock()
@@ -150,7 +155,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHost(False)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", [], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", [], "testprefix", "metric")
 
     def test_gauge(self):
         self.ml.gauge("metric", 10)
@@ -175,9 +181,9 @@ class TestMetricsLogger(unittest.TestCase):
         self.assertFalse(self.ml._counter.called)
 
         self.assertRaises(ValueError, self.ml.counter,
-            "metric", 10, sample_rate=-0.1)
+                          "metric", 10, sample_rate=-0.1)
         self.assertRaises(ValueError, self.ml.counter,
-            "metric", 10, sample_rate=1.1)
+                          "metric", 10, sample_rate=1.1)
 
     def test_timer(self):
         self.ml.timer("metric", 10)
@@ -194,21 +200,26 @@ class TestStatsdMetricsLogger(unittest.TestCase):
 
     def test__format_name(self):
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", "testhost",
+                                 "testprefix", "testmetric"),
             "globalprefix.testhost.testprefix.testmetric")
 
     def test__format_name_with_lists(self):
         self.assertEqual(
-            self.ml._format_name(["global", "prefix"], "testhost", "testprefix", "testmetric"),
+            self.ml._format_name(["global", "prefix"], "testhost",
+                                 "testprefix", "testmetric"),
             "global.prefix.testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", ["test", "host"], "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", ["test", "host"],
+                                 "testprefix", "testmetric"),
             "globalprefix.test.host.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", ["test", "prefix"], "testmetric"),
+            self.ml._format_name("globalprefix", "testhost",
+                                 ["test", "prefix"], "testmetric"),
             "globalprefix.testhost.test.prefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", "testprefix", ["test", "metric"]),
+            self.ml._format_name("globalprefix", "testhost",
+                                 "testprefix", ["test", "metric"]),
             "globalprefix.testhost.testprefix.test.metric")
 
     def test__format_name_with_empty_lists(self):
@@ -216,7 +227,8 @@ class TestStatsdMetricsLogger(unittest.TestCase):
             self.ml._format_name([], "testhost", "testprefix", "testmetric"),
             "testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", [], "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", [],
+                                 "testprefix", "testmetric"),
             "globalprefix.testprefix.testmetric")
         self.assertEqual(
             self.ml._format_name("globalprefix", "testhost", [], "testmetric"),
@@ -230,7 +242,8 @@ class TestStatsdMetricsLogger(unittest.TestCase):
             self.ml._format_name("", "testhost", "testprefix", "testmetric"),
             "testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "", "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", "",
+                                 "testprefix", "testmetric"),
             "globalprefix.testprefix.testmetric")
         self.assertEqual(
             self.ml._format_name("globalprefix", "testhost", "", "testmetric"),
@@ -257,7 +270,6 @@ class TestStatsdMetricsLogger(unittest.TestCase):
     def test__timer(self, mock_send):
         self.ml._timer("metric", 10)
         mock_send.assert_called_once_with("metric", 10, "ms")
-
 
     @mock.patch("socket.socket")
     def test__open_socket(self, mock_socket_constructor):
