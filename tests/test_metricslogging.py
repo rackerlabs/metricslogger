@@ -15,11 +15,31 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+
+import metricslogging
 import mock
 import socket
 import unittest
 
-import metricslogging
+
+class TestNestedConfig(unittest.TestCase):
+    def setUp(self):
+        super(TestNestedConfig, self).setUp()
+
+        self.parent_config = metricslogging.NestedConfig()
+        self.child_config = metricslogging.NestedConfig(
+            parent=self.parent_config)
+
+        self.parentSetConfig, self.parentGetConfig = \
+            self.parent_config.add_config("config")
+        self.parentSetConfigDefault, self.parentGetConfigDefault = \
+            self.parent_config.add_config("configdefault", default="default")
+
+        self.childSetConfig, self.childGetConfig = \
+            self.child_config.add_config("config", override=True)
+
+    def test_add_config(self):
+        pass
 
 
 class MockedMetricsLogger(metricslogging.MetricsLogger):
@@ -29,20 +49,72 @@ class MockedMetricsLogger(metricslogging.MetricsLogger):
     _timer = mock.Mock()
 
 
-class TestNestedConfig(unittest.TestCase):
+class TestTimerContextDecorator(unittest.TestCase):
     def setUp(self):
-        super(TestNestedConfig, self).setUp()
+        super(TestTimerContextDecorator, self).setUp()
 
-        self.parent_config = metricslogging.NestedConfig()
-        self.child_config = metricslogging.NestedConfig(parent=self.parent_config)
+        self.ml = MockedMetricsLogger()
 
-        self.parentSetConfig, self.parentGetConfig = self.parent_config.add_config("config")
-        self.parentSetConfigDefault, self.parentGetConfigDefault = self.parent_config.add_config("configdefault", default="default")
+    @mock.patch("metricslogging.metricslogging._time")
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
+    def test_timer_cd_as_decorator(self, mock_timer, mock_time):
+        mock_time.side_effect = [1, 43]
 
-        self.childSetConfig, self.childGetConfig = self.child_config.add_config("config", override=True)
+        @self.ml.timer_cd("metric")
+        def func(x):
+            return x * x
 
-    def test_add_config(self):
-        pass
+        func(10)
+        mock_timer.assert_called_once_with("metric", 42*1000)
+
+    @mock.patch("metricslogging.metricslogging._time")
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
+    def test_timer_cd_as_context(self, mock_timer, mock_time):
+        mock_time.side_effect = [1, 43]
+
+        with self.ml.timer_cd("metric") as _:
+            pass
+
+        mock_timer.assert_called_once_with("metric", 42*1000)
+
+
+class TestCounterContextDecorator(unittest.TestCase):
+    def setUp(self):
+        super(TestCounterContextDecorator, self).setUp()
+
+        self.ml = MockedMetricsLogger()
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_decorator(self, mock_counter):
+        @self.ml.counter_cd("metric")
+        def func(x):
+            return x * x
+
+        func(10)
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=None)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_decorator_sample_rate(self, mock_counter):
+        @self.ml.counter_cd("metric", 0.5)
+        def func(x):
+            return x * x
+
+        func(10)
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=0.5)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_context(self, mock_counter):
+        with self.ml.counter_cd("metric") as _:
+            pass
+
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=None)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_context_sample_rate(self, mock_counter):
+        with self.ml.counter_cd("metric", sample_rate=0.5) as _:
+            pass
+
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=0.5)
 
 
 class TestMetricsLogger(unittest.TestCase):
@@ -64,7 +136,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHostReverse(False)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", ["host", "example", "com"], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", ["host", "example", "com"], "testprefix", "metric")
 
     def test_format_name_prepend_host_reverse(self):
         self.ml._format_name.reset_mock()
@@ -73,7 +146,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHostReverse(True)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", ["com", "example", "host"], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", ["com", "example", "host"], "testprefix", "metric")
 
     def test_format_name_no_prepend_host(self):
         self.ml._format_name.reset_mock()
@@ -81,7 +155,8 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.setPrependHost(False)
 
         self.ml.format_name("metric")
-        self.ml._format_name.assert_called_once_with("globalprefix", [], "testprefix", "metric")
+        self.ml._format_name.assert_called_once_with(
+            "globalprefix", [], "testprefix", "metric")
 
     def test_gauge(self):
         self.ml.gauge("metric", 10)
@@ -106,25 +181,13 @@ class TestMetricsLogger(unittest.TestCase):
         self.assertFalse(self.ml._counter.called)
 
         self.assertRaises(ValueError, self.ml.counter,
-            "metric", 10, sample_rate=-0.1)
+                          "metric", 10, sample_rate=-0.1)
         self.assertRaises(ValueError, self.ml.counter,
-            "metric", 10, sample_rate=1.1)
+                          "metric", 10, sample_rate=1.1)
 
     def test_timer(self):
         self.ml.timer("metric", 10)
         self.ml._timer.assert_called_once_with("mocked_format_name", 10)
-
-    @mock.patch("metricslogging.metricslogging._time")
-    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
-    def test_instrument(self, mock_timer, mock_time):
-        mock_time.side_effect=[1, 43]
-
-        @self.ml.fn_time("foo", "bar", "baz")
-        def func(x):
-            return x * x
-
-        func(10)
-        mock_timer.assert_called_once_with(("foo", "bar", "baz"), 42*1000)
 
 
 class TestStatsdMetricsLogger(unittest.TestCase):
@@ -137,22 +200,26 @@ class TestStatsdMetricsLogger(unittest.TestCase):
 
     def test__format_name(self):
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", "testprefix", "testmetric"),
-            "globalprefix.testhost.testprefix.testmetric"
-        )
+            self.ml._format_name("globalprefix", "testhost",
+                                 "testprefix", "testmetric"),
+            "globalprefix.testhost.testprefix.testmetric")
 
     def test__format_name_with_lists(self):
         self.assertEqual(
-            self.ml._format_name(["global", "prefix"], "testhost", "testprefix", "testmetric"),
+            self.ml._format_name(["global", "prefix"], "testhost",
+                                 "testprefix", "testmetric"),
             "global.prefix.testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", ["test", "host"], "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", ["test", "host"],
+                                 "testprefix", "testmetric"),
             "globalprefix.test.host.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", ["test", "prefix"], "testmetric"),
+            self.ml._format_name("globalprefix", "testhost",
+                                 ["test", "prefix"], "testmetric"),
             "globalprefix.testhost.test.prefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "testhost", "testprefix", ["test", "metric"]),
+            self.ml._format_name("globalprefix", "testhost",
+                                 "testprefix", ["test", "metric"]),
             "globalprefix.testhost.testprefix.test.metric")
 
     def test__format_name_with_empty_lists(self):
@@ -160,7 +227,8 @@ class TestStatsdMetricsLogger(unittest.TestCase):
             self.ml._format_name([], "testhost", "testprefix", "testmetric"),
             "testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", [], "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", [],
+                                 "testprefix", "testmetric"),
             "globalprefix.testprefix.testmetric")
         self.assertEqual(
             self.ml._format_name("globalprefix", "testhost", [], "testmetric"),
@@ -174,7 +242,8 @@ class TestStatsdMetricsLogger(unittest.TestCase):
             self.ml._format_name("", "testhost", "testprefix", "testmetric"),
             "testhost.testprefix.testmetric")
         self.assertEqual(
-            self.ml._format_name("globalprefix", "", "testprefix", "testmetric"),
+            self.ml._format_name("globalprefix", "",
+                                 "testprefix", "testmetric"),
             "globalprefix.testprefix.testmetric")
         self.assertEqual(
             self.ml._format_name("globalprefix", "testhost", "", "testmetric"),
@@ -201,7 +270,6 @@ class TestStatsdMetricsLogger(unittest.TestCase):
     def test__timer(self, mock_send):
         self.ml._timer("metric", 10)
         mock_send.assert_called_once_with("metric", 10, "ms")
-
 
     @mock.patch("socket.socket")
     def test__open_socket(self, mock_socket_constructor):
@@ -247,11 +315,10 @@ class TestStatsdMetricsLogger(unittest.TestCase):
         mock_socket = mock.Mock()
         mock_socket_constructor.return_value = mock_socket
 
-        self.ml._send("m|e@t:ric", 2, "type")
+        self.ml._send("m|e@t:r\nic", 2, "type")
         mock_socket.sendto.assert_called_once_with(
-            "m-e-t-ric:2|type",
+            "m-e-t-r-ic:2|type",
             ("testhost", 4321))
-
 
 
 class TestGetLogger(unittest.TestCase):
