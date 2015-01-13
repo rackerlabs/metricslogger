@@ -22,11 +22,7 @@ import unittest
 import metricslogging
 
 
-class MockedMetricsLogger(metricslogging.MetricsLogger):
-    _format_name = mock.Mock(return_value="mocked_format_name")
-    _gauge = mock.Mock()
-    _counter = mock.Mock()
-    _timer = mock.Mock()
+
 
 
 class TestNestedConfig(unittest.TestCase):
@@ -43,6 +39,57 @@ class TestNestedConfig(unittest.TestCase):
 
     def test_add_config(self):
         pass
+
+
+class MockedMetricsLogger(metricslogging.MetricsLogger):
+    _format_name = mock.Mock(return_value="mocked_format_name")
+    _gauge = mock.Mock()
+    _counter = mock.Mock()
+    _timer = mock.Mock()
+
+
+class TestTimerContextDecorator(unittest.TestCase):
+    def setUp(self):
+        super(TestTimerContextDecorator, self).setUp()
+
+        self.ml = MockedMetricsLogger()
+
+    @mock.patch("metricslogging.metricslogging._time")
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
+    def test_timer_cd(self, mock_timer, mock_time):
+        mock_time.side_effect = [1, 43]
+
+        @self.ml.timer_cd("metric")
+        def func(x):
+            return x * x
+
+        func(10)
+        mock_timer.assert_called_once_with("metric", 42*1000)
+
+
+class TestCounterContextDecorator(unittest.TestCase):
+    def setUp(self):
+        super(TestCounterContextDecorator, self).setUp()
+
+        self.ml = MockedMetricsLogger()
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd(self, mock_counter):
+        @self.ml.counter_cd("metric")
+        def func(x):
+            return x * x
+
+        func(10)
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=None)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_sample_rate(self, mock_counter):
+        @self.ml.counter_cd("metric", 0.5)
+        def func(x):
+            return x * x
+
+        func(10)
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=0.5)
 
 
 class TestMetricsLogger(unittest.TestCase):
@@ -113,18 +160,6 @@ class TestMetricsLogger(unittest.TestCase):
     def test_timer(self):
         self.ml.timer("metric", 10)
         self.ml._timer.assert_called_once_with("mocked_format_name", 10)
-
-    @mock.patch("metricslogging.metricslogging._time")
-    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
-    def test_time_fn(self, mock_timer, mock_time):
-        mock_time.side_effect=[1, 43]
-
-        @self.ml.time_fn("foo", "bar", "baz")
-        def func(x):
-            return x * x
-
-        func(10)
-        mock_timer.assert_called_once_with(("foo", "bar", "baz"), 42*1000)
 
 
 class TestStatsdMetricsLogger(unittest.TestCase):

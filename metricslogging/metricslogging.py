@@ -111,11 +111,11 @@ class TimerContextDecorator(contextlib2.ContextDecorator):
         self.name = name
 
     def __enter__(self):
-        self.start_time = time.time()
+        self.start_time = _time()
         return self
 
     def __exit__(self, *exc):
-        duration = (time.time() - self.start_time) * 1000
+        duration = (_time() - self.start_time) * 1000
         self.logger.timer(self.name, duration)
 
 
@@ -162,7 +162,11 @@ class MetricsLogger(object):
         return self._format_name(self.getGlobalPrefix(), host, self.getPrefix(), name)
 
     def gauge(self, name, value):
-        """Send gauge metric data."""
+        """Send gauge metric data.
+
+        :param name: Metric name
+        :param value: Metric value
+        """
         self._gauge(self.format_name(name), value)
 
     def counter(self, name, value, sample_rate=None):
@@ -175,6 +179,10 @@ class MetricsLogger(object):
 
         If sample_rate is None, then always send metric data, but do not
         have the backend send sample rate information (if supported).
+
+        :param name: Metric name
+        :param value: Metric value
+        :param sample_rate: Sample rate in interval [0.0, 1.0]
         """
         if sample_rate is not None and \
             (sample_rate < 0.0 or sample_rate > 1.0):
@@ -186,7 +194,11 @@ class MetricsLogger(object):
                                  sample_rate=sample_rate)
 
     def timer(self, name, value):
-        """Send timer data."""
+        """Send timer data.
+
+        :param name: Metric name
+        :param value: Metric value
+        """
         self._timer(self.format_name(name), value)
 
     @abc.abstractmethod
@@ -204,29 +216,6 @@ class MetricsLogger(object):
     @abc.abstractmethod
     def _timer(self, name, value):
         """Abstract method for backends to implement timer behavior."""
-
-    def time_fn(self, *name):
-        """Returns a decorator that instruments a function, bound to this
-        MetricsLogger.  For example:
-
-        @METRICS.time_fn('foo')
-        def foo(bar, baz):
-            print bar, baz
-        """
-        def decorator(f):
-            @functools.wraps(f)
-            def wrapped(*args, **kwargs):
-                start = _time()
-                result = f(*args, **kwargs)
-
-                # Call duration in seconds
-                duration = _time() - start
-
-                # Log the timing data as a timer (in ms)
-                self.timer(name, duration * 1000)
-                return result
-            return wrapped
-        return decorator
 
     def timer_cd(self, name):
         return TimerContextDecorator(self, name)
