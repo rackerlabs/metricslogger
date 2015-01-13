@@ -22,9 +22,6 @@ import unittest
 import metricslogging
 
 
-
-
-
 class TestNestedConfig(unittest.TestCase):
     def setUp(self):
         super(TestNestedConfig, self).setUp()
@@ -56,7 +53,7 @@ class TestTimerContextDecorator(unittest.TestCase):
 
     @mock.patch("metricslogging.metricslogging._time")
     @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
-    def test_timer_cd(self, mock_timer, mock_time):
+    def test_timer_cd_as_decorator(self, mock_timer, mock_time):
         mock_time.side_effect = [1, 43]
 
         @self.ml.timer_cd("metric")
@@ -67,6 +64,16 @@ class TestTimerContextDecorator(unittest.TestCase):
         mock_timer.assert_called_once_with("metric", 42*1000)
 
 
+    @mock.patch("metricslogging.metricslogging._time")
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.timer")
+    def test_timer_cd_as_context(self, mock_timer, mock_time):
+        mock_time.side_effect = [1, 43]
+
+        with self.ml.timer_cd("metric") as _:
+            pass
+
+        mock_timer.assert_called_once_with("metric", 42*1000)
+
 class TestCounterContextDecorator(unittest.TestCase):
     def setUp(self):
         super(TestCounterContextDecorator, self).setUp()
@@ -74,7 +81,7 @@ class TestCounterContextDecorator(unittest.TestCase):
         self.ml = MockedMetricsLogger()
 
     @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
-    def test_counter_cd(self, mock_counter):
+    def test_counter_cd_as_decorator(self, mock_counter):
         @self.ml.counter_cd("metric")
         def func(x):
             return x * x
@@ -83,12 +90,26 @@ class TestCounterContextDecorator(unittest.TestCase):
         mock_counter.assert_called_once_with("metric", 1, sample_rate=None)
 
     @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
-    def test_counter_cd_sample_rate(self, mock_counter):
+    def test_counter_cd_as_decorator_sample_rate(self, mock_counter):
         @self.ml.counter_cd("metric", 0.5)
         def func(x):
             return x * x
 
         func(10)
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=0.5)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_context(self, mock_counter):
+        with self.ml.counter_cd("metric") as _:
+            pass
+
+        mock_counter.assert_called_once_with("metric", 1, sample_rate=None)
+
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.counter")
+    def test_counter_cd_as_context_sample_rate(self, mock_counter):
+        with self.ml.counter_cd("metric", sample_rate=0.5) as _:
+            pass
+
         mock_counter.assert_called_once_with("metric", 1, sample_rate=0.5)
 
 
