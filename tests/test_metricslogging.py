@@ -189,6 +189,15 @@ class TestMetricsLogger(unittest.TestCase):
         self.ml.timer("metric", 10)
         self.ml._timer.assert_called_once_with("mocked_format_name", 10)
 
+    @mock.patch("metricslogging.metricslogging.MetricsLogger.gauge")
+    def test_return_val_gauge_d(self, mock_gauge):
+        @self.ml.return_val_gauge_d("metric")
+        def func():
+            return 42
+
+        func()
+        mock_gauge.assert_called_once_with("metric", 42)
+
 
 class TestStatsdMetricsLogger(unittest.TestCase):
     def setUp(self):
