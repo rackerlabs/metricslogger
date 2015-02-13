@@ -25,6 +25,7 @@ import six
 import socket
 import string
 import time
+import wrapt
 
 
 def _time():
@@ -310,6 +311,20 @@ class MetricsLogger(object):
         :param sample_rate: Sample rate to be passed to counter()
         """
         return CounterContextDecorator(self, name, sample_rate)
+
+    def return_val_gauge_d(self, name):
+        """
+        Returns a decorator bound to this metrics MetricsLogger that emits the
+        return value of the function it wraps as a gauge each time it is
+        called.
+        :param name: Metric name
+        """
+        @wrapt.decorator
+        def wrapper(wrapped, instance, args, kwargs):
+            result = wrapped(*args, **kwargs)
+            self.gauge(name, result)
+            return result
+        return wrapper
 
 
 class NoopMetricsLogger(MetricsLogger):
